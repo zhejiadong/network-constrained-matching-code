@@ -27,8 +27,8 @@ Rscript 02_analysis.R
 ```
 
 The first script prepares the cohort and network. The second runs matching,
-inference and sensitivity analysis with kappa = 3. For the supplementary
-analyses, run `Rscript 02_analysis.R 2` and `Rscript 02_analysis.R 4`.
+inference and sensitivity analysis with `kappa <- 3`. For the supplementary
+analyses, change `kappa` to 2 or 4 at the top of `02_analysis.R`, then rerun it.
 
 Prepared data are saved in `data/`, numerical results in `results/`, and
 sensitivity, balance and covariate-similarity plots in `figures/`.

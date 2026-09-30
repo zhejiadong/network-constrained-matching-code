@@ -1,9 +1,8 @@
-# Run from fhs_application/; use 02_analysis.R 2 or 02_analysis.R 4 for the supplement.
+# Run from fhs_application/.
 library(netmatchRI)
 library(ggplot2)
 
-args <- commandArgs(trailingOnly = TRUE)
-kappa <- if (length(args)) as.integer(args[1]) else 3
+kappa <- 3  # Set to 2 or 4 for the supplementary analyses.
 
 prepared <- readRDS("data/fhs_analysis_data.rds")
 cohort <- prepared$cohort
