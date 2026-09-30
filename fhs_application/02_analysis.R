@@ -3,7 +3,7 @@ args <- commandArgs(trailingOnly = TRUE)
 kappa <- if (length(args)) as.integer(args[1]) else 3L
 stopifnot(kappa %in% c(2L, 3L, 4L))
 
-required_packages <- c("netmatchRI", "ggplot2", "MASS", "highs")
+required_packages <- c("netmatchRI", "ggplot2", "highs")
 missing <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
 ]
@@ -125,43 +125,10 @@ ri_results <- rbind(
   extract_result(dual_design, "Dual-penalty", "RI Design")
 )
 
-inverse_covariance <- function(X) {
-  S <- stats::cov(X)
-  if (abs(det(S)) > 1e-10) solve(S) else MASS::ginv(S)
-}
-average_mahalanobis <- function(object = NULL) {
-  X <- as.matrix(cohort[, covariates, drop = FALSE])
-  Sinv <- inverse_covariance(X)
-  z <- cohort[[treatment]]
-  if (is.null(object)) {
-    pairs <- expand.grid(treated = which(z == 1), control = which(z == 0))
-  } else {
-    index <- match(object$data$id, ids)
-    subclass <- object$data$subclass
-    sets <- split(seq_along(index), subclass)
-    pairs <- do.call(rbind, lapply(sets, function(position) {
-      units <- index[position]
-      tr <- units[z[units] == 1]
-      co <- units[z[units] == 0]
-      if (!length(tr) || !length(co)) return(NULL)
-      expand.grid(treated = tr, control = co)
-    }))
-  }
-  values <- vapply(seq_len(nrow(pairs)), function(i) {
-    delta <- X[pairs$treated[i], ] - X[pairs$control[i], ]
-    sqrt(as.numeric(t(delta) %*% Sinv %*% delta))
-  }, numeric(1))
-  mean(values)
-}
-similarity <- data.frame(
-  design = c("Before", "Covariate-only", "Dual-penalty"),
-  average_mahalanobis = c(
-    average_mahalanobis(),
-    average_mahalanobis(covariate_match),
-    average_mahalanobis(dual_match)
-  ),
-  stringsAsFactors = FALSE
-)
+designs <- list("Covariate-only" = covariate_match, "Dual-penalty" = dual_match)
+p_balance <- netmatchRI::plot_covariate_balance(designs)
+p_similarity <- netmatchRI::plot_covariate_similarity(designs)
+similarity <- p_similarity$data[, c("design", "average_mahalanobis")]
 
 results_dir <- "results"
 figures_dir <- "figures"
@@ -196,56 +163,13 @@ inference_summary <- data.frame(
 write.csv(inference_summary, file.path(results_dir, paste0(prefix, "_summary.csv")), row.names = FALSE)
 print(inference_summary, row.names = FALSE)
 
-base_theme <- ggplot2::theme_bw(base_size = 12) +
-  ggplot2::theme(panel.grid.minor = ggplot2::element_blank())
-
-grid <- sensitivity$grid
-grid$eta_label <- factor(sprintf("%.2f", grid$eta),
-  levels = sprintf("%.2f", sort(unique(grid$eta))))
-naive_p <- ri_results$p_value[
-  ri_results$design == "Covariate-only" & ri_results$inference == "Unadjusted RI"
-]
-p_sensitivity <- ggplot2::ggplot(grid,
-  ggplot2::aes(rho, p_value, colour = eta_label, group = eta_label)) +
-  ggplot2::geom_line(linewidth = 0.65) + ggplot2::geom_point(size = 1.6) +
-  ggplot2::geom_hline(yintercept = 0.05, colour = "red", linetype = "dotted") +
-  ggplot2::geom_hline(yintercept = naive_p, linetype = "dashed") +
-  ggplot2::labs(x = expression(rho), y = "p-value", colour = expression(eta)) + base_theme
+p_sensitivity <- netmatchRI::plot_sensitivity(
+  sensitivity, unadjusted = covariate_naive
+)
 ggplot2::ggsave(file.path(figures_dir, paste0(prefix, "_sensitivity_pvalues.pdf")),
                 p_sensitivity, width = 7, height = 4)
-
-
-cov_balance <- covariate_diagnostics$covariate_balance
-dual_balance <- dual_diagnostics$covariate_balance
-balance <- rbind(
-  data.frame(covariate = cov_balance$covariate, design = "Before",
-             abs_smd = cov_balance$before_abs_smd),
-  data.frame(covariate = cov_balance$covariate, design = "Covariate-only",
-             abs_smd = cov_balance$after_abs_smd),
-  data.frame(covariate = dual_balance$covariate, design = "Dual-penalty",
-             abs_smd = dual_balance$after_abs_smd)
-)
-balance$design <- factor(balance$design,
-  levels = c("Before", "Covariate-only", "Dual-penalty"))
-p_balance <- ggplot2::ggplot(balance,
-  ggplot2::aes(abs_smd, factor(covariate), colour = design, shape = design)) +
-  ggplot2::geom_vline(xintercept = 0.1, linetype = "dashed") +
-  ggplot2::geom_point(size = 2.6) +
-  ggplot2::labs(x = "Absolute standardized mean difference", y = NULL,
-                colour = NULL, shape = NULL) + base_theme +
-  ggplot2::theme(legend.position = "bottom")
 ggplot2::ggsave(file.path(figures_dir, paste0(prefix, "_covariate_balance.pdf")),
                 p_balance, width = 6.5, height = 4.5)
-
-similarity$design <- factor(similarity$design,
-  levels = c("Before", "Covariate-only", "Dual-penalty"))
-p_similarity <- ggplot2::ggplot(similarity,
-  ggplot2::aes(design, average_mahalanobis, fill = design)) +
-  ggplot2::geom_col(width = 0.62, colour = "#333333") +
-  ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", average_mahalanobis)),
-                     vjust = -0.45) +
-  ggplot2::labs(x = NULL, y = "Average treated-control Mahalanobis distance") +
-  base_theme + ggplot2::theme(legend.position = "none")
 ggplot2::ggsave(file.path(figures_dir, paste0(prefix, "_covariate_similarity.pdf")),
                 p_similarity, width = 6.5, height = 4.5)
 
