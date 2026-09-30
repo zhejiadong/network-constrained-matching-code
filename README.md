@@ -1,13 +1,10 @@
-# Network-dependent causal inference: paper code
+# Code for simulation studies and data application of FHS
 
-Original paper code for the simulation study and Framingham Heart Study (FHS) application, organized for line-by-line author review.
+The repository has two parts:
 
-The repository has two independent parts:
-
-- `simulation/`: original network/DGP, Gurobi matching, null inference (including Oracle), sensitivity, parameter selection, power and matching-evaluation figures.
+- `simulation/`: data generating process for the simulation,  matching, null inference, sensitivity, parameter selection, power and matching-evaluation figures.
 - `fhs_application/`: preparation of authorized FHS/dbGaP files followed by the application analysis.
 
-No data, CSV files, cached R objects, binaries, results or plots are distributed. The deny-by-default `.gitignore` exposes only the reviewed code and documentation. `_local/` is private history/evidence, not a publication input. License: pending author choice; no license grant is made here.
 
 ## Simulation
 
