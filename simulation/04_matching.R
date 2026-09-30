@@ -32,7 +32,7 @@ source(file.path(CODE_ROOT, "source/fmnp_gurobi.R"))
 source(file.path(CODE_ROOT, "source/run_matching_task.R"))
 
 # Which (bz, dep) combos to run
-BZ_VEC  <- 0 # accepted null-only scope
+BZ_VEC  <- if ("power" %in% commandArgs(trailingOnly = TRUE)) c(0, 0.1, 0.2, 0.3, 0.4) else 0
 DEP_VEC <- c(1, 2, 3)
 
 # Matching parameters (same as run_matching_parallel_simple.R)

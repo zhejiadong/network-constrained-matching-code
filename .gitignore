@@ -13,6 +13,12 @@
 !/simulation/05_prepare_inputs.R
 !/simulation/06_run_null_inference.R
 !/simulation/07_summarize.R
+!/simulation/08_export_null_grid.R
+!/simulation/09_select_optimal_params.R
+!/simulation/10_run_ri_power.R
+!/simulation/11_plot_power.R
+!/simulation/12_matching_evaluation.R
+!/simulation/13_replot_matching_labels.R
 !/simulation/source/
 /simulation/source/*
 !/simulation/source/statistics.R
@@ -21,6 +27,8 @@
 !/simulation/source/utility.R
 !/simulation/source/fmnp_gurobi.R
 !/simulation/source/run_matching_task.R
+!/simulation/source/utility_ri.R
+!/simulation/source/matching_metrics.R
 /fhs_application/*
 !/fhs_application/README.md
 !/fhs_application/01_prepare_data.R

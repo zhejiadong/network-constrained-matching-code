@@ -75,8 +75,8 @@ solve_c_global <- function(mu, V, p) {
 }
 
 beta.z.Vec <- c(0,0.1,0.2,0.3,0.4)
-# This packaged entrypoint selects the accepted null-only scope.
-for(b in 1L){
+# Default: null only. Pass "power" to include all original treatment effects.
+for(b in if ("power" %in% commandArgs(trailingOnly = TRUE)) seq_along(beta.z.Vec) else 1L){
   beta.z <- beta.z.Vec[b]
   for(dep_indx in c(1:3)){
     V <- V.list[[dep_indx]]
