@@ -1,39 +1,19 @@
-# Deny by default. Only explicitly reviewed code/documentation may be published.
+# Only source scripts and documentation are tracked.
 /*
 !/.gitignore
 !/README.md
 !/simulation/
 !/fhs_application/
 /simulation/*
-!/simulation/README.md
-!/simulation/01_network.R
-!/simulation/02_covariance.R
-!/simulation/03_generate_data.R
-!/simulation/04_matching.R
-!/simulation/05_prepare_inputs.R
-!/simulation/06_run_null_inference.R
-!/simulation/07_summarize.R
-!/simulation/08_export_null_grid.R
-!/simulation/09_select_optimal_params.R
-!/simulation/10_run_ri_power.R
-!/simulation/11_plot_power.R
-!/simulation/12_matching_evaluation.R
-!/simulation/13_replot_matching_labels.R
-!/simulation/source/
-/simulation/source/*
-!/simulation/source/statistics.R
-!/simulation/source/covariance.R
-!/simulation/source/utility_oracle.R
-!/simulation/source/utility.R
-!/simulation/source/fmnp_gurobi.R
-!/simulation/source/run_matching_task.R
-!/simulation/source/utility_ri.R
-!/simulation/source/matching_metrics.R
+!/simulation/01_generate_data.R
+!/simulation/02_run_analysis.R
+!/simulation/03_make_tables_figures.R
+!/simulation/helpers.R
 /fhs_application/*
 !/fhs_application/README.md
 !/fhs_application/01_prepare_data.R
 !/fhs_application/02_analysis.R
-# Defense against future additions outside the explicit candidate.
+# Generated files stay local.
 _local/
 *.csv
 *.CSV

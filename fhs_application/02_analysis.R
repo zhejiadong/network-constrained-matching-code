@@ -1,13 +1,7 @@
-# Direct analysis of the locally prepared FHS application object.
-# Run 01_prepare_data.R first. All generated objects remain in ignored local folders.
-
-script_path <- function() {
-  frame_file <- tryCatch(sys.frame(1)$ofile, error = function(e) NULL)
-  if (!is.null(frame_file)) return(normalizePath(frame_file, winslash = "/"))
-  arg <- grep("^--file=", commandArgs(), value = TRUE)
-  if (length(arg)) return(normalizePath(sub("^--file=", "", arg[1]), winslash = "/"))
-  normalizePath("02_analysis.R", winslash = "/", mustWork = TRUE)
-}
+# Run from fhs_application/; use 02_analysis.R 2 or 02_analysis.R 4 for the supplement.
+args <- commandArgs(trailingOnly = TRUE)
+kappa <- if (length(args)) as.integer(args[1]) else 3L
+stopifnot(kappa %in% c(2L, 3L, 4L))
 
 required_packages <- c("netmatchRI", "ggplot2", "MASS", "highs")
 missing <- required_packages[
@@ -16,8 +10,7 @@ missing <- required_packages[
 if (length(missing))
   stop("Missing package(s): ", paste(missing, collapse = ", "), call. = FALSE)
 
-base <- dirname(script_path())
-input <- file.path(base, "data", "fhs_analysis_data.rds")
+input <- "data/fhs_analysis_data.rds"
 if (!file.exists(input))
   stop("Run 01_prepare_data.R first; missing: ", input, call. = FALSE)
 prepared <- readRDS(input)
@@ -33,9 +26,9 @@ required <- c("id", treatment, outcome, covariates)
 if (!is.data.frame(cohort) || nrow(cohort) != 2347L ||
     !all(required %in% names(cohort)) ||
     !all(stats::complete.cases(cohort[, required, drop = FALSE])))
-  stop("The prepared cohort does not satisfy the reviewed schema/N contract.", call. = FALSE)
+  stop("Expected 2347 complete participant records with the required fields.", call. = FALSE)
 if (sum(cohort[[treatment]] == 1) != 371L || sum(cohort[[treatment]] == 0) != 1976L)
-  stop("Treatment counts differ from the reviewed 371/1,976 contract.", call. = FALSE)
+  stop("Expected 371 participants with obesity and 1976 without.", call. = FALSE)
 ids <- as.character(cohort$id)
 if (!is.matrix(distance) || !identical(dim(distance), c(2347L, 2347L)) ||
     !identical(rownames(distance), ids) || !identical(colnames(distance), ids))
@@ -43,7 +36,6 @@ if (!is.matrix(distance) || !identical(dim(distance), c(2347L, 2347L)) ||
 
 design_data <- cohort[, c("id", treatment, covariates), drop = FALSE]
 rownames(design_data) <- ids
-kappa <- 3
 weight_type <- "ns"
 
 cat("Running covariate-only full matching.\n")
@@ -59,7 +51,7 @@ covariate_match <- netmatchRI::netmatch(
   max_controls = 100
 )
 
-cat("Running dual-penalty matching (kappa = 3).\n")
+cat("Running dual-penalty matching with kappa =", kappa, "\n")
 dual_match <- netmatchRI::netmatch(
   data = design_data,
   treat = treatment,
@@ -72,7 +64,7 @@ dual_match <- netmatchRI::netmatch(
   min_controls = 0.01,
   max_controls = 100,
   caliper = Inf,
-  timelimit = 7200,
+  timelimit = 86400,
   mipgap = 0.01,
   threads = 1L
 )
@@ -101,7 +93,7 @@ dual_design <- netmatchRI::RI_design(
 sensitivity <- netmatchRI::sensitivity_grid(
   dual_match_y,
   outcome,
-  eta = c(0, 0.02, 0.05, 0.10, 0.15, 0.20),
+  eta = seq(0.01, 0.05, by = 0.01),
   rho = seq(0, 1, by = 0.05),
   kappa = kappa,
   weight_type = weight_type
@@ -128,8 +120,8 @@ extract_result <- function(x, design, inference) {
   out
 }
 ri_results <- rbind(
-  extract_result(covariate_naive, "Covariate-only", "RI Naive"),
-  extract_result(dual_naive, "Dual-penalty", "RI Naive"),
+  extract_result(covariate_naive, "Covariate-only", "Unadjusted RI"),
+  extract_result(dual_naive, "Dual-penalty", "Unadjusted RI"),
   extract_result(dual_design, "Dual-penalty", "RI Design")
 )
 
@@ -171,8 +163,9 @@ similarity <- data.frame(
   stringsAsFactors = FALSE
 )
 
-results_dir <- file.path(base, "results")
-figures_dir <- file.path(base, "figures")
+results_dir <- "results"
+figures_dir <- "figures"
+prefix <- paste0("fhs_e4_e5_k", kappa)
 dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(figures_dir, recursive = TRUE, showWarnings = FALSE)
 results <- list(
@@ -187,7 +180,21 @@ results <- list(
   similarity = similarity,
   created = format(Sys.time(), tz = "UTC")
 )
-saveRDS(results, file.path(results_dir, "fhs_analysis_results.rds"), compress = TRUE)
+saveRDS(results, file.path(results_dir, paste0(prefix, "_results.rds")), compress = TRUE)
+inference_summary <- data.frame(
+  kappa = kappa, n = nrow(dual_match$data),
+  n_sets = critical$detail$n_sets,
+  covariate_unadjusted_p = covariate_naive$result$p_value,
+  dual_unadjusted_p = dual_naive$result$p_value,
+  design_p = dual_design$result$p_value,
+  critical_eta_rho1 = critical$summary$eta_critical,
+  relevant_set_pairs = critical$detail$n_relevant_pairs,
+  critical_ratio = critical$summary$critical_ratio,
+  critical_ratio_percent = 100 * critical$summary$critical_ratio,
+  as.data.frame(dual_match$solver_info)
+)
+write.csv(inference_summary, file.path(results_dir, paste0(prefix, "_summary.csv")), row.names = FALSE)
+print(inference_summary, row.names = FALSE)
 
 base_theme <- ggplot2::theme_bw(base_size = 12) +
   ggplot2::theme(panel.grid.minor = ggplot2::element_blank())
@@ -196,7 +203,7 @@ grid <- sensitivity$grid
 grid$eta_label <- factor(sprintf("%.2f", grid$eta),
   levels = sprintf("%.2f", sort(unique(grid$eta))))
 naive_p <- ri_results$p_value[
-  ri_results$design == "Covariate-only" & ri_results$inference == "RI Naive"
+  ri_results$design == "Covariate-only" & ri_results$inference == "Unadjusted RI"
 ]
 p_sensitivity <- ggplot2::ggplot(grid,
   ggplot2::aes(rho, p_value, colour = eta_label, group = eta_label)) +
@@ -204,21 +211,9 @@ p_sensitivity <- ggplot2::ggplot(grid,
   ggplot2::geom_hline(yintercept = 0.05, colour = "red", linetype = "dotted") +
   ggplot2::geom_hline(yintercept = naive_p, linetype = "dashed") +
   ggplot2::labs(x = expression(rho), y = "p-value", colour = expression(eta)) + base_theme
-ggplot2::ggsave(file.path(figures_dir, "fhs_sensitivity_pvalues.pdf"),
+ggplot2::ggsave(file.path(figures_dir, paste0(prefix, "_sensitivity_pvalues.pdf")),
                 p_sensitivity, width = 7, height = 4)
 
-curve <- critical$curve
-curve$eta_display <- pmin(1, pmax(0, curve$eta_critical))
-p_critical <- ggplot2::ggplot(curve, ggplot2::aes(rho, eta_display)) +
-  ggplot2::geom_ribbon(ggplot2::aes(ymin = 0, ymax = eta_display),
-                       fill = "#D9EAF7", alpha = 0.65) +
-  ggplot2::geom_line(colour = "#2166AC", linewidth = 0.7) +
-  ggplot2::geom_point(data = data.frame(rho = 1, eta_display = 1),
-                      shape = 18, size = 2.6) +
-  ggplot2::coord_cartesian(xlim = c(0, 1), ylim = c(0, 1)) +
-  ggplot2::labs(x = expression(rho), y = expression(eta^"*")) + base_theme
-ggplot2::ggsave(file.path(figures_dir, "fhs_critical_sensitivity.pdf"),
-                p_critical, width = 7, height = 4)
 
 cov_balance <- covariate_diagnostics$covariate_balance
 dual_balance <- dual_diagnostics$covariate_balance
@@ -239,7 +234,7 @@ p_balance <- ggplot2::ggplot(balance,
   ggplot2::labs(x = "Absolute standardized mean difference", y = NULL,
                 colour = NULL, shape = NULL) + base_theme +
   ggplot2::theme(legend.position = "bottom")
-ggplot2::ggsave(file.path(figures_dir, "fhs_covariate_balance.pdf"),
+ggplot2::ggsave(file.path(figures_dir, paste0(prefix, "_covariate_balance.pdf")),
                 p_balance, width = 6.5, height = 4.5)
 
 similarity$design <- factor(similarity$design,
@@ -251,13 +246,12 @@ p_similarity <- ggplot2::ggplot(similarity,
                      vjust = -0.45) +
   ggplot2::labs(x = NULL, y = "Average treated-control Mahalanobis distance") +
   base_theme + ggplot2::theme(legend.position = "none")
-ggplot2::ggsave(file.path(figures_dir, "fhs_covariate_similarity.pdf"),
+ggplot2::ggsave(file.path(figures_dir, paste0(prefix, "_covariate_similarity.pdf")),
                 p_similarity, width = 6.5, height = 4.5)
 
-outputs <- file.path(figures_dir, c(
-  "fhs_sensitivity_pvalues.pdf", "fhs_critical_sensitivity.pdf",
-  "fhs_covariate_balance.pdf", "fhs_covariate_similarity.pdf"
-))
+outputs <- file.path(figures_dir, paste0(prefix, c(
+  "_sensitivity_pvalues.pdf", "_covariate_balance.pdf", "_covariate_similarity.pdf"
+)))
 if (!all(file.exists(outputs)) || any(file.info(outputs)$size == 0))
   stop("One or more FHS figures were not created.", call. = FALSE)
-cat("PASS: FHS matching, inference, sensitivity, and four figures completed.\n")
+cat("Saved FHS inference summary and three figures for kappa =", kappa, "\n")

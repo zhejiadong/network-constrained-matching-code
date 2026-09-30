@@ -1,20 +1,38 @@
 # Framingham Heart Study application
 
-This folder follows a code-only controlled-data workflow similar in disclosure level to Youjin Lee's public FHS repository: the required dbGaP/FHS tables, field names, eligibility rules, and analysis logic are documented, but no controlled data or participant-level derived objects are distributed.
+The analysis uses Exam 4 obesity, Exam 5 height-indexed left ventricular mass,
+and baseline covariates from the FHS Offspring cohort.
 
-## Use
+## Data
 
-1. Obtain authorized access to the required FHS/dbGaP release.
-2. Place the compressed text tables listed in `01_prepare_data.R` under `data_raw/`.
-3. Run:
+Place the authorized dbGaP files in `data_raw/`. Use both consent groups
+(`c1` and `c2`) with the original `.txt.gz` filenames.
 
-```text
+| Table | Filename prefix before `c1.` or `c2.` |
+| --- | --- |
+| Exam 4 clinic | `phs000007.v35.pht000033.v13.p16.` |
+| Exam 4 echocardiography | `phs000007.v35.pht000300.v12.p16.` |
+| Exam 5 clinic | `phs000007.v35.pht000034.v12.p16.` |
+| Exam 5 echocardiography | `phs000007.v35.pht000301.v12.p16.` |
+| Dates and demographics | `phs000007.v35.pht003099.v10.p16.` |
+| Social network | `phs000153.v9.pht000836.v8.p8.` |
+
+## Run
+
+Install the packages listed in the repository README, then run in `fhs_application/`:
+
+```sh
 Rscript 01_prepare_data.R
 Rscript 02_analysis.R
 ```
 
-`01_prepare_data.R` is intended to create `data/fhs_analysis_data.rds` containing the eligible cohort, E4 network, and distance matrix. `02_analysis.R` runs covariate-only and dual-penalty matching, randomization inference, sensitivity analysis, and four application plots. Direct dependencies are listed in the root README.
+The first script prepares the cohort and network. The second runs matching,
+inference and sensitivity analysis with kappa = 3. For the supplementary
+analyses, run `Rscript 02_analysis.R 2` and `Rscript 02_analysis.R 4`.
 
-These are the existing code-only application scripts, not a newly validated FHS reproduction. Packaging parsed both scripts and tested the tab-delimited intake helper with artificial rows only. Three literal-backslash-t delimiters in the header/unique-ID reader were corrected to actual tab delimiters; no cohort/analysis specification changed. Controlled-data execution, outputs and correspondence to manuscript figures remain unverified by this packaging task. Do not infer full FHS verification from a parse or synthetic intake test.
+Prepared data are saved in `data/`, numerical results in `results/`, and
+sensitivity, balance and covariate-similarity plots in `figures/`.
+Output filenames identify the kappa value.
 
-The `data_raw/`, `data/`, `results/`, and `figures/` directories are ignored. They may contain protected participant rows, identifiers, network edges, distance matrices, matched designs, or derived outcomes and must not be committed or transferred to a public repository.
+FHS data require authorized access and are not distributed here. Keep all
+participant-level inputs and outputs in the authorized environment.

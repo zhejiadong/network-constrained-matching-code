@@ -1,14 +1,4 @@
-# Prepare the controlled FHS/dbGaP files for the paper application.
-# Place the authorized compressed text tables under data_raw/ beside this script.
-# The participant-level RDS written under data/ is local-only and must not be committed.
-
-script_path <- function() {
-  frame_file <- tryCatch(sys.frame(1)$ofile, error = function(e) NULL)
-  if (!is.null(frame_file)) return(normalizePath(frame_file, winslash = "/"))
-  arg <- grep("^--file=", commandArgs(), value = TRUE)
-  if (length(arg)) return(normalizePath(sub("^--file=", "", arg[1]), winslash = "/"))
-  normalizePath("01_prepare_data.R", winslash = "/", mustWork = TRUE)
-}
+# Run from fhs_application/ with authorized dbGaP tables in data_raw/.
 
 stopf <- function(...) stop(sprintf(...), call. = FALSE)
 text_con <- function(path) {
@@ -56,8 +46,7 @@ positive <- function(x) !is.na(x) & is.finite(x) & x > 0
 
 if (!requireNamespace("igraph", quietly = TRUE)) stop("Package 'igraph' is required.")
 if (!requireNamespace("ape", quietly = TRUE)) stop("Package 'ape' is required.")
-base <- dirname(script_path())
-raw_dir <- file.path(base, "data_raw")
+raw_dir <- "data_raw"
 if (!dir.exists(raw_dir))
   stop("Create data_raw/ beside this script and place the authorized dbGaP files there.")
 paths <- list.files(raw_dir, recursive = TRUE, full.names = TRUE)
@@ -306,7 +295,7 @@ observed <- c(
 )
 if (!identical(unname(observed), unname(expected))) {
   stop(
-    "Constructed cohort does not reproduce the reviewed 2347/371/1976 contract. ",
+    "Expected 2347 participants, including 371 with obesity and 1976 without. ",
     "Observed: ", paste(names(observed), observed, collapse = ", "), "."
   )
 }
@@ -463,7 +452,7 @@ distance <- distance[cohort$id, cohort$id, drop = FALSE]
 diag(distance) <- 0
 
 
-data_dir <- file.path(base, "data")
+data_dir <- "data"
 dir.create(data_dir, recursive = TRUE, showWarnings = FALSE)
 analysis_data <- list(
   cohort = cohort,
