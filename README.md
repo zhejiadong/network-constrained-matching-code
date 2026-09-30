@@ -2,7 +2,7 @@
 
 The repository has two parts:
 
-- `simulation/`: data generation, matching, null inference, sensitivity, power and matching-evaluation figures.
+- `simulation/`: data generation, matching, inference, sensitivity, power analysis, figures and tables.
 - `fhs_application/`: preparation of authorized FHS/dbGaP files followed by the application analysis.
 
 Matching and inference use [netmatchRI](https://github.com/zhejiadong/netmatchRI).
