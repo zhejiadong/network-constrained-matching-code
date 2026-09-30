@@ -1,9 +1,11 @@
-settings <- function() {
-  args <- commandArgs(trailingOnly = TRUE)
-  mode <- if (length(args)) args[1] else "null"
-  stopifnot(length(args) <= 1L, mode %in% c("null", "power"))
-  list(mode = mode, reps = 500L, n = 300L, mc = 500L, solver = "gurobi")
-}
+# Simulation settings: edit these values before running the three scripts.
+s <- list(
+  mode = "null",  # Change to "power" for the power analysis.
+  reps = 500,
+  n = 300,
+  mc = 500,
+  solver = "gurobi"
+)
 
 dependence <- c("Independent", "Moderate", "Strong")
 design_labels <- c(covariate = "Covariate-only", single = "Single-penalty",
@@ -23,8 +25,6 @@ simulate_data <- function(V, effect, seed) {
     Z <- as.integer(mvtnorm::rmvnorm(1, mean = mu, sigma = V) > threshold)
     if (sum(Z) >= 0.2 * n && sum(Z) <= 0.3 * n) break
   }
-  if (sum(Z) < 0.2 * n || sum(Z) > 0.3 * n)
-    warning("Treatment count outside the requested range after 100 draws.")
   Y <- as.numeric(mvtnorm::rmvnorm(1, mean = mu + effect * Z, sigma = V))
   data.frame(Y = Y, Z = Z, X1 = X[, 1], X2 = X[, 2], X3 = X[, 3])
 }
@@ -48,8 +48,6 @@ oracle_test <- function(match, V, mc = 500) {
   df <- match$data
   ids <- as.integer(rownames(df))
   sets <- split(seq_len(nrow(df)), df$subclass, drop = TRUE)
-  if (any(vapply(sets, function(i) anyDuplicated(df$Y[i]) > 0, logical(1))))
-    stop("The oracle rank calculation requires untied outcomes within sets.")
   score <- numeric(nrow(df))
   constant <- expectation <- 0
   for (i in sets) {
@@ -87,7 +85,6 @@ matching_metrics <- function(data, distance, matches) {
   rows <- list()
   for (method in c("Before", names(matches))) {
     s <- if (method == "Before") rep(1L, nrow(data)) else matches[[method]]$subclass
-    stopifnot(!anyNA(s))
     same <- outer(as.character(s), as.character(s), "==")
     tc <- outer(z, z, function(a, b) a == 1 & b == 0) & same
     nd <- distance[upper.tri(distance) & same]

@@ -29,13 +29,9 @@ Rscript 03_make_tables_figures.R
 ```
 
 This runs the null experiment with 300 units, three dependence settings and
-500 replications. For the power analysis, add `power` to each command:
-
-```sh
-Rscript 01_generate_data.R power
-Rscript 02_run_analysis.R power
-Rscript 03_make_tables_figures.R power
-```
+500 replications. Settings are listed at the top of `simulation/helpers.R`.
+For the power analysis, change `mode = "null"` to `mode = "power"` there,
+then rerun the same three scripts.
 
 Data are saved in `data/`, tables in `results/`, and figures in `figures/`.
 Rerunning a step replaces its outputs.

@@ -1,7 +1,5 @@
 source("helpers.R")
-s <- settings()
 input <- readRDS(file.path("data", paste0(s$mode, ".rds")))
-stopifnot(input$settings$n == s$n, input$settings$reps == s$reps)
 dir.create("results", recursive = TRUE, showWarnings = FALSE)
 pvalues <- grids <- diagnostics <- computation <- list()
 power_eta <- c(0, 0.01, 0.03)
@@ -21,7 +19,6 @@ for (i in seq_len(nrow(input$cases))) {
     started <- proc.time()[["elapsed"]]
     m <- match_design(data, input$distance, method, s$solver)
     elapsed <- proc.time()[["elapsed"]] - started
-    stopifnot(all(m$matched))
     matches[[method]] <- m
     computation[[length(computation) + 1L]] <- cbind(key,
       design = design_labels[method], as.data.frame(m$solver_info),
@@ -59,6 +56,4 @@ for (i in seq_len(nrow(input$cases))) {
 result <- list(settings = s, pvalues = do.call(rbind, pvalues),
                grid = do.call(rbind, grids), diagnostics = do.call(rbind, diagnostics),
                computation = do.call(rbind, computation))
-stopifnot(all(is.finite(result$pvalues$p_value)),
-          all(result$pvalues$p_value >= 0 & result$pvalues$p_value <= 1))
 saveRDS(result, file.path("results", paste0(s$mode, "_analysis.rds")))

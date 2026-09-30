@@ -1,5 +1,4 @@
 source("helpers.R")
-s <- settings()
 dir.create("data", recursive = TRUE, showWarnings = FALSE)
 
 set.seed(2026)

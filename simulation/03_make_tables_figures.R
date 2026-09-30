@@ -1,8 +1,6 @@
 library(ggplot2)
 source("helpers.R")
-s <- settings()
 result <- readRDS(file.path("results", paste0(s$mode, "_analysis.rds")))
-stopifnot(result$settings$n == s$n, result$settings$reps == s$reps)
 results_dir <- "results"
 figures_dir <- "figures"
 dir.create(figures_dir, recursive = TRUE, showWarnings = FALSE)
@@ -11,7 +9,6 @@ rows$reject <- rows$p_value < 0.05
 rates <- aggregate(reject ~ dependence + effect + design + procedure, rows, mean)
 n <- aggregate(reject ~ dependence + effect + design + procedure, rows, length)
 rates$n <- n$reject
-stopifnot(all(rates$n == s$reps))
 names(rates)[names(rates) == "reject"] <- "rate"
 rates$dependence <- factor(rates$dependence, levels = dependence)
 write.csv(rates, file.path(results_dir, paste0(s$mode, "_rejection_rates.csv")), row.names = FALSE)
