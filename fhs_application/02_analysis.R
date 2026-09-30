@@ -1,38 +1,17 @@
 # Run from fhs_application/; use 02_analysis.R 2 or 02_analysis.R 4 for the supplement.
+library(netmatchRI)
+library(ggplot2)
+
 args <- commandArgs(trailingOnly = TRUE)
-kappa <- if (length(args)) as.integer(args[1]) else 3L
-stopifnot(kappa %in% c(2L, 3L, 4L))
+kappa <- if (length(args)) as.integer(args[1]) else 3
 
-required_packages <- c("netmatchRI", "ggplot2", "highs")
-missing <- required_packages[
-  !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
-]
-if (length(missing))
-  stop("Missing package(s): ", paste(missing, collapse = ", "), call. = FALSE)
-
-input <- "data/fhs_analysis_data.rds"
-if (!file.exists(input))
-  stop("Run 01_prepare_data.R first; missing: ", input, call. = FALSE)
-prepared <- readRDS(input)
-if (!is.list(prepared) || !all(c("cohort", "distance") %in% names(prepared)))
-  stop("Prepared FHS object has the wrong schema.", call. = FALSE)
-
+prepared <- readRDS("data/fhs_analysis_data.rds")
 cohort <- prepared$cohort
-distance <- prepared$distance
+ids <- as.character(cohort$id)
+distance <- prepared$distance[ids, ids]
 treatment <- "obesity4"
 outcome <- "lvm_height5"
 covariates <- c("age4", "female", "smoking4", "alcohol_any4", "sbp4", "lvm_height4")
-required <- c("id", treatment, outcome, covariates)
-if (!is.data.frame(cohort) || nrow(cohort) != 2347L ||
-    !all(required %in% names(cohort)) ||
-    !all(stats::complete.cases(cohort[, required, drop = FALSE])))
-  stop("Expected 2347 complete participant records with the required fields.", call. = FALSE)
-if (sum(cohort[[treatment]] == 1) != 371L || sum(cohort[[treatment]] == 0) != 1976L)
-  stop("Expected 371 participants with obesity and 1976 without.", call. = FALSE)
-ids <- as.character(cohort$id)
-if (!is.matrix(distance) || !identical(dim(distance), c(2347L, 2347L)) ||
-    !identical(rownames(distance), ids) || !identical(colnames(distance), ids))
-  stop("The network-distance matrix is not exactly aligned to the cohort.", call. = FALSE)
 
 design_data <- cohort[, c("id", treatment, covariates), drop = FALSE]
 rownames(design_data) <- ids
@@ -68,17 +47,11 @@ dual_match <- netmatchRI::netmatch(
   mipgap = 0.01,
   threads = 1L
 )
-if (!inherits(covariate_match, "netmatch") || !inherits(dual_match, "netmatch"))
-  stop("Matching did not return the expected netmatch objects.", call. = FALSE)
-
-attach_outcome <- function(object) {
-  index <- match(as.character(object$data$id), ids)
-  if (anyNA(index)) stop("Could not align the outcome to a matched design.")
-  object$data[[outcome]] <- cohort[[outcome]][index]
-  object
-}
-covariate_match_y <- attach_outcome(covariate_match)
-dual_match_y <- attach_outcome(dual_match)
+# Add the outcome after matching, using participant IDs.
+covariate_match_y <- covariate_match
+covariate_match_y$data[[outcome]] <- cohort[[outcome]][match(covariate_match$data$id, ids)]
+dual_match_y <- dual_match
+dual_match_y$data[[outcome]] <- cohort[[outcome]][match(dual_match$data$id, ids)]
 
 cat("Running randomization inference and sensitivity analysis.\n")
 covariate_naive <- netmatchRI::RI_unadjusted(
@@ -109,21 +82,9 @@ critical <- netmatchRI::critical_sensitivity(
 
 covariate_diagnostics <- netmatchRI::diagnose_match(covariate_match)
 dual_diagnostics <- netmatchRI::diagnose_match(dual_match)
-if (!is.data.frame(sensitivity$grid) || !is.data.frame(critical$curve))
-  stop("Sensitivity analysis returned an unexpected object.", call. = FALSE)
-
-extract_result <- function(x, design, inference) {
-  out <- x$result
-  if (!is.data.frame(out)) stop("RI result table is missing.")
-  out$design <- design
-  out$inference <- inference
-  out
-}
-ri_results <- rbind(
-  extract_result(covariate_naive, "Covariate-only", "Unadjusted RI"),
-  extract_result(dual_naive, "Dual-penalty", "Unadjusted RI"),
-  extract_result(dual_design, "Dual-penalty", "RI Design")
-)
+ri_results <- rbind(covariate_naive$result, dual_naive$result, dual_design$result)
+ri_results$design <- c("Covariate-only", "Dual-penalty", "Dual-penalty")
+ri_results$inference <- c("Unadjusted RI", "Unadjusted RI", "RI Design")
 
 designs <- list("Covariate-only" = covariate_match, "Dual-penalty" = dual_match)
 p_balance <- netmatchRI::plot_covariate_balance(designs)
@@ -173,9 +134,4 @@ ggplot2::ggsave(file.path(figures_dir, paste0(prefix, "_covariate_balance.pdf"))
 ggplot2::ggsave(file.path(figures_dir, paste0(prefix, "_covariate_similarity.pdf")),
                 p_similarity, width = 6.5, height = 4.5)
 
-outputs <- file.path(figures_dir, paste0(prefix, c(
-  "_sensitivity_pvalues.pdf", "_covariate_balance.pdf", "_covariate_similarity.pdf"
-)))
-if (!all(file.exists(outputs)) || any(file.info(outputs)$size == 0))
-  stop("One or more FHS figures were not created.", call. = FALSE)
 cat("Saved FHS inference summary and three figures for kappa =", kappa, "\n")

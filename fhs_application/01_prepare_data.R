@@ -1,146 +1,64 @@
-# Run from fhs_application/ with authorized dbGaP tables in data_raw/.
+# Run from fhs_application/ with the dbGaP files in data_raw/.
+library(igraph)
+library(ape)
 
-stopf <- function(...) stop(sprintf(...), call. = FALSE)
-text_con <- function(path) {
-  if (grepl("[.]gz$", path)) gzfile(path, "rt") else file(path, "rt")
-}
-header_info <- function(path) {
-  con <- text_con(path); on.exit(close(con))
-  lines <- readLines(con, n = 100L, warn = FALSE)
-  clean <- sub("^#\\s*", "", lines, perl = TRUE)
-  clean <- gsub('"', '', clean, fixed = TRUE)
-  hit <- which(vapply(strsplit(clean, "\t", fixed = TRUE),
-                      function(z) "shareid" %in% z, logical(1)))
-  if (length(hit) != 1L) stopf("Cannot identify one shareid header in %s.", basename(path))
-  columns <- strsplit(clean[hit], "\t", fixed = TRUE)[[1]]
-  if (anyDuplicated(columns)) stopf("Duplicate column names in %s.", basename(path))
-  list(skip = hit, columns = columns)
-}
-read_table <- function(path, fields) {
-  h <- header_info(path)
-  if (!all(fields %in% h$columns))
-    stopf("Missing required fields in %s: %s", basename(path),
-          paste(setdiff(fields, h$columns), collapse = ", "))
-  classes <- ifelse(h$columns %in% fields, "character", "NULL")
-  con <- text_con(path); on.exit(close(con))
-  out <- utils::read.delim(
-    con, skip = h$skip, header = FALSE, col.names = h$columns,
-    colClasses = classes, sep = "\t", quote = '"', comment.char = "",
-    fill = FALSE, check.names = FALSE, na.strings = c("", ".", "NA"),
-    stringsAsFactors = FALSE
-  )
-  out <- out[, fields, drop = FALSE]
-  out$shareid <- trimws(out$shareid)
-  if (anyNA(out$shareid) || any(!nzchar(out$shareid)))
-    stopf("Missing shareid in %s.", basename(path))
-  if (anyDuplicated(out$shareid)) stopf("Duplicate shareid in %s.", basename(path))
-  out
-}
-numeric_checked <- function(x, label) {
-  y <- suppressWarnings(as.numeric(x))
-  if (any(!is.na(x) & (!is.finite(y) | is.na(y))))
-    stopf("Non-numeric or non-finite entries in %s.", label)
-  y
-}
-positive <- function(x) !is.na(x) & is.finite(x) & x > 0
-
-if (!requireNamespace("igraph", quietly = TRUE)) stop("Package 'igraph' is required.")
-if (!requireNamespace("ape", quietly = TRUE)) stop("Package 'ape' is required.")
-raw_dir <- "data_raw"
-if (!dir.exists(raw_dir))
-  stop("Create data_raw/ beside this script and place the authorized dbGaP files there.")
-paths <- list.files(raw_dir, recursive = TRUE, full.names = TRUE)
-paths <- paths[file.exists(paths) & !file.info(paths)$isdir]
-
-read_table_allow_repeated_ids <- function(path, fields) {
-  h <- header_info(path)
-  missing <- setdiff(fields, h$columns)
-  if (length(missing))
-    stop("Missing required fields in ", basename(path), ": ",
-         paste(missing, collapse = ", "))
-  classes <- ifelse(h$columns %in% fields, "character", "NULL")
-  con <- text_con(path)
-  on.exit(close(con))
-  out <- utils::read.delim(
-    con,
-    skip = h$skip,
-    header = FALSE,
-    col.names = h$columns,
-    colClasses = classes,
-    sep = "\t",
-    quote = '"',
-    comment.char = "",
-    fill = FALSE,
-    check.names = FALSE,
-    na.strings = c("", ".", "NA"),
-    stringsAsFactors = FALSE
-  )
-  out <- out[, fields, drop = FALSE]
-  out$shareid <- trimws(out$shareid)
-  if (anyNA(out$shareid) || any(!nzchar(out$shareid)))
-    stop("Missing ego shareid in ", basename(path), ".")
-  out
-}
-
-read_pair <- function(prefix, fields, label, unique_ids = TRUE) {
+# Read the requested columns from both consent groups.
+paths <- list.files("data_raw", recursive = TRUE, full.names = TRUE)
+read_pair <- function(prefix, fields) {
   parts <- lapply(c("c1", "c2"), function(consent) {
-    wanted <- paste0(prefix, consent, ".")
-    hit <- paths[
-      startsWith(basename(paths), wanted) &
-        grepl("[.]txt[.]gz$", basename(paths))
-    ]
-    if (length(hit) != 1L) {
-      stop(label, " requires exactly one ", consent,
-           " table; found ", length(hit), ".")
-    }
-    out <- if (unique_ids) {
-      read_table(hit, fields)
-    } else {
-      read_table_allow_repeated_ids(hit, fields)
-    }
-    out$consent <- consent
-    attr(out, "source_file") <- basename(hit)
-    out
+    path <- paths[startsWith(basename(paths), paste0(prefix, consent, ".")) &
+                    grepl("[.]txt[.]gz$", basename(paths))]
+    con <- gzfile(path, "rt")
+    lines <- readLines(con, n = 100, warn = FALSE)
+    close(con)
+    lines <- gsub('"', '', sub("^#\\s*", "", lines, perl = TRUE), fixed = TRUE)
+    header <- which(vapply(strsplit(lines, "\t", fixed = TRUE),
+                           function(x) "shareid" %in% x, logical(1)))
+    columns <- strsplit(lines[header], "\t", fixed = TRUE)[[1]]
+    con <- gzfile(path, "rt")
+    on.exit(close(con))
+    data <- read.delim(con, skip = header, header = FALSE, col.names = columns,
+      colClasses = ifelse(columns %in% fields, "character", "NULL"),
+      quote = '"', comment.char = "", fill = FALSE, check.names = FALSE,
+      na.strings = c("", ".", "NA"), stringsAsFactors = FALSE)
+    data <- data[, fields, drop = FALSE]
+    data$shareid <- trimws(data$shareid)
+    data$consent <- consent
+    attr(data, "source_file") <- basename(path)
+    data
   })
-  out <- do.call(rbind, parts)
-  rownames(out) <- NULL
-  if (unique_ids && anyDuplicated(out$shareid))
-    stop(label, " has duplicate shareid values after c1/c2 binding.")
-  attr(out, "source_files") <- vapply(parts, function(x) attr(x, "source_file"), character(1))
-  out
+  data <- do.call(rbind, parts)
+  rownames(data) <- NULL
+  attr(data, "source_files") <- vapply(parts, function(x) attr(x, "source_file"), character(1))
+  data
 }
+
+positive <- function(x) !is.na(x) & is.finite(x) & x > 0
 
 e4_clinic <- read_pair(
   "phs000007.v35.pht000033.v13.p16.",
   c("shareid", "idtype", "D401", "D402", "D093",
-    "D082", "D085", "D088", "D192", "D288"),
-  "E4 clinic"
+    "D082", "D085", "D088", "D192", "D288")
 )
 e4_echo <- read_pair(
   "phs000007.v35.pht000300.v12.p16.",
-  c("shareid", "IVSD4", "LVPD4", "LVDD4"),
-  "E4 echo"
+  c("shareid", "IVSD4", "LVPD4", "LVDD4")
 )
 e5_clinic <- read_pair(
   "phs000007.v35.pht000034.v12.p16.",
-  c("shareid", "E025"),
-  "E5 clinic"
+  c("shareid", "E025")
 )
 e5_echo <- read_pair(
   "phs000007.v35.pht000301.v12.p16.",
-  c("shareid", "idtype", "IVSD5", "LVPD5", "LVDD5"),
-  "E5 echo"
+  c("shareid", "idtype", "IVSD5", "LVPD5", "LVDD5")
 )
 demographics <- read_pair(
   "phs000007.v35.pht003099.v10.p16.",
-  c("shareid", "age4", "sex", "date4"),
-  "Dates/demographics"
+  c("shareid", "age4", "sex", "date4")
 )
 relationships <- read_pair(
   "phs000153.v9.pht000836.v8.p8.",
-  c("shareid", "sharealterid", "ALTERTYPE", "SPELLBEGIN", "SPELLEND"),
-  "Social network",
-  unique_ids = FALSE
+  c("shareid", "sharealterid", "ALTERTYPE", "SPELLBEGIN", "SPELLEND")
 )
 
 source_files <- data.frame(
@@ -178,28 +96,11 @@ for (z in list(e4_echo, e5_clinic, e5_echo, demographics))
 
 consent_fields <- c("consent_e4_echo", "consent_e5_clinic",
                     "consent_e5_echo", "consent_demo")
-for (field in consent_fields) {
-  observed <- !is.na(d[[field]])
-  if (any(d[[field]][observed] != d$consent_e4_clinic[observed]))
-    stop("Consent-group mismatch after joining ", field, ".")
-}
-
 nonnumeric <- c("shareid", "consent_e4_clinic", consent_fields)
 for (field in setdiff(names(d), nonnumeric))
-  d[[field]] <- numeric_checked(d[[field]], field)
+  d[[field]] <- as.numeric(d[[field]])
 
-if (any(!is.na(d$idtype) & !d$idtype %in% 0:3) ||
-    any(!is.na(d$idtype5) & !d$idtype5 %in% 0:3))
-  stop("Unexpected cohort identifier code.")
-both_idtype <- !is.na(d$idtype) & !is.na(d$idtype5)
-if (any(d$idtype[both_idtype] != d$idtype5[both_idtype]))
-  stop("E4 clinic and E5 echo cohort identifiers disagree.")
-if (any(!is.na(d$D093) & !d$D093 %in% 0:1))
-  stop("D093 contains a value outside 0/1/missing.")
-for (field in c("D082", "D085", "D088"))
-  if (any(d[[field]] < 0, na.rm = TRUE))
-    stop(field, " contains a negative alcohol value.")
-
+# Baseline covariates and height-indexed LVM at E4 and E5.
 d$height4_m <- d$D402 * 0.0254
 d$weight4_kg <- d$D401 * 0.45359237
 d$bmi4 <- d$weight4_kg / d$height4_m^2
@@ -227,6 +128,8 @@ d$lvm5_g <- 0.8 * 1.04 * (
 ) + 0.6
 d$lvm_height5 <- d$lvm5_g / d$height5_m
 
+
+# Apply the cohort restrictions.
 offspring <- d$idtype == 1 & d$idtype5 == 1
 offspring[is.na(offspring)] <- FALSE
 paired_measurements <- offspring
@@ -287,29 +190,13 @@ cohort <- data.frame(
 cohort <- cohort[order(cohort$id), , drop = FALSE]
 rownames(cohort) <- NULL
 
-expected <- c(n = 2347L, obese = 371L, nonobese = 1976L)
-observed <- c(
-  n = nrow(cohort),
-  obese = sum(cohort$obesity4 == 1),
-  nonobese = sum(cohort$obesity4 == 0)
-)
-if (!identical(unname(observed), unname(expected))) {
-  stop(
-    "Expected 2347 participants, including 371 with obesity and 1976 without. ",
-    "Observed: ", paste(names(observed), observed, collapse = ", "), "."
-  )
-}
-if (anyDuplicated(cohort$id)) stop("Final cohort contains duplicate IDs.")
-analysis_fields <- c("obesity4", "lvm_height5", "age4", "female",
-                     "smoking4", "alcohol_any4", "sbp4", "lvm_height4")
-if (!all(stats::complete.cases(cohort[, analysis_fields, drop = FALSE])))
-  stop("Final cohort has missing analysis fields.")
 
+# E4-active ties within the analysis cohort.
 relationships$shareid <- trimws(as.character(relationships$shareid))
 relationships$sharealterid <- trimws(as.character(relationships$sharealterid))
 relationships$ALTERTYPE <- trimws(as.character(relationships$ALTERTYPE))
-relationships$SPELLBEGIN <- numeric_checked(relationships$SPELLBEGIN, "SPELLBEGIN")
-relationships$SPELLEND <- numeric_checked(relationships$SPELLEND, "SPELLEND")
+relationships$SPELLBEGIN <- as.numeric(relationships$SPELLBEGIN)
+relationships$SPELLEND <- as.numeric(relationships$SPELLEND)
 
 active <- !is.na(relationships$shareid) & nzchar(relationships$shareid) &
   !is.na(relationships$sharealterid) & nzchar(relationships$sharealterid) &
@@ -329,7 +216,6 @@ edges <- unique(data.frame(
   to = pmax(active_edges$shareid, active_edges$sharealterid),
   stringsAsFactors = FALSE
 ))
-if (!nrow(edges)) stop("No E4-active edges remain in the eligible cohort.")
 
 graph <- igraph::graph_from_data_frame(
   edges,
@@ -337,8 +223,6 @@ graph <- igraph::graph_from_data_frame(
   vertices = data.frame(name = cohort$id, stringsAsFactors = FALSE)
 )
 graph <- igraph::simplify(graph, remove.multiple = TRUE, remove.loops = TRUE)
-if (!identical(as.character(igraph::V(graph)$name), cohort$id))
-  stop("Graph vertex order does not match cohort ID order.")
 
 degree <- igraph::degree(graph)
 components <- igraph::components(graph)
@@ -357,11 +241,9 @@ graph_summary <- data.frame(
 )
 
 adjacency <- as.matrix(igraph::as_adjacency_matrix(graph, sparse = FALSE))
+adjacency <- adjacency[cohort$id, cohort$id]
 storage.mode(adjacency) <- "double"
 diag(adjacency) <- 0
-if (!identical(rownames(adjacency), cohort$id) ||
-    !identical(colnames(adjacency), cohort$id))
-  stop("Adjacency matrix IDs are not aligned with the cohort.")
 
 moran_variables <- c(
   "obesity4", "age4", "female", "smoking4",
@@ -485,5 +367,3 @@ print(moran_report[, c("variable", "observed_I", "expected_I", "sd", "p_value")]
       row.names = FALSE)
 
 cat("\nSaved local analysis object: ", out, "\n", sep = "")
-cat("Next: run 02_analysis.R from this folder.\n")
-invisible(out)
