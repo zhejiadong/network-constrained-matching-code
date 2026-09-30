@@ -44,7 +44,6 @@ match_design <- function(data, distance, method, solver) {
   })
 }
 
-# Gaussian ordering within sets, as in Supplement S4 and utility_oracle.R.
 oracle_test <- function(match, V, mc = 500) {
   df <- match$data
   ids <- as.integer(rownames(df))
