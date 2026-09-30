@@ -1,10 +1,10 @@
 # Simulation settings: edit these values before running the three scripts.
 s <- list(
   mode = "null",  # Change to "power" for the power analysis.
-  reps = 500,
-  n = 300,
-  mc = 500,
-  solver = "gurobi"
+  reps = 500, # replication times
+  n = 300, # sample size
+  mc = 500, #Monte Carlo sampling times
+  solver = "gurobi" # change to highs if needed
 )
 
 dependence <- c("Independent", "Moderate", "Strong")
