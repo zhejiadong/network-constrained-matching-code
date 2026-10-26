@@ -9,9 +9,10 @@ Matching and inference use [netmatchRI](https://github.com/zhejiadong/netmatchRI
 
 ## Install
 
+Install netmatchRI and the additional packages used by the scripts from CRAN:
+
 ```r
-install.packages(c("remotes", "ggplot2", "mvtnorm", "ape"))
-remotes::install_github("zhejiadong/netmatchRI", upgrade = "never")
+install.packages(c("netmatchRI", "ggplot2", "mvtnorm", "ape"))
 ```
 
 The simulation uses Gurobi, as in the paper; its R package and a valid license
